@@ -1,8 +1,8 @@
 {
   "name": "mistral-spreadsheet",
   "version": "1.0.0",
-  "main": "dist/spreadsheet.js",
-  "types": "dist/spreadsheet.d.ts",
+  "main": "src/spreadsheet.js",
+  "types": "src/spreadsheet.d.ts",
   "scripts": {
     "build": "tsc",
     "test": "ts-node tests/spreadsheet.test.ts"
