@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mistral Spreadsheet</title>
-    <script src="https://unpkg.com/typescript@5.3.3/lib/typescript.js"></script>
+    <script>var exports = {};</script>
+    <script src="../dist/spreadsheet.js"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -14,26 +15,33 @@
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: #f5f5f5;
-            padding: 20px;
+            background: linear-gradient(160deg, #eef2fb 0%, #f7f7fa 55%, #fdf3ec 100%);
+            color: #1f2430;
+            padding: 40px 20px;
             min-height: 100vh;
         }
         
         .container {
-            max-width: 1200px;
+            max-width: 1180px;
             margin: 0 auto;
         }
         
         h1 {
-            color: #333;
-            margin-bottom: 20px;
-            font-size: 24px;
+            color: #1f2430;
+            font-size: 28px;
+            letter-spacing: -0.02em;
+        }
+
+        .subtitle {
+            color: #6b7280;
+            font-size: 14px;
+            margin: 4px 0 22px;
         }
         
         .spreadsheet-container {
             background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(31,36,48,0.12), 0 1px 3px rgba(31,36,48,0.08);
             overflow: hidden;
         }
         
@@ -61,8 +69,9 @@
         
         .toolbar input {
             padding: 8px 12px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
+            border: 1px solid #d5d9e0;
+            border-radius: 6px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
             font-size: 14px;
             width: 200px;
         }
@@ -70,7 +79,7 @@
         .spreadsheet-wrapper {
             overflow-x: auto;
             overflow-y: auto;
-            max-height: 70vh;
+            max-height: 560px;
         }
         
         table {
@@ -79,11 +88,11 @@
         }
         
         th, td {
-            padding: 8px 12px;
-            border: 1px solid #e0e0e0;
+            padding: 0;
+            border: 1px solid #e8eaee;
             text-align: left;
-            min-width: 80px;
-            height: 36px;
+            min-width: 104px;
+            height: 32px;
             position: relative;
         }
         
@@ -107,9 +116,9 @@
             height: 100%;
             border: none;
             background: transparent;
-            font-family: monospace;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
             font-size: 13px;
-            padding: 4px;
+            padding: 4px 10px;
             outline: none;
         }
         
@@ -119,8 +128,15 @@
         }
         
         .cell.formula {
-            font-style: italic;
-            color: #1a73e8;
+            color: #1a56c8;
+        }
+
+        .cell.bold {
+            font-weight: 700;
+        }
+
+        .cell.fill {
+            background: #f1f4fa;
         }
         
         .cell.error {
@@ -136,6 +152,8 @@
             font-weight: 600;
             color: #666;
             text-align: center;
+            min-width: 48px;
+            width: 48px;
         }
         
         .col-header {
@@ -143,12 +161,12 @@
         }
         
         .stats {
-            margin-top: 20px;
+            margin-top: 18px;
             padding: 12px 16px;
             background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            font-family: monospace;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(31,36,48,0.08), 0 1px 3px rgba(31,36,48,0.06);
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
             font-size: 12px;
             color: #666;
         }
@@ -161,6 +179,15 @@
         
         .highlight {
             background: #fff8e1;
+        }
+
+        .stats code {
+            display: inline-block;
+            background: #eef2fb;
+            color: #1a56c8;
+            border-radius: 4px;
+            padding: 1px 6px;
+            margin: 2px 4px 2px 0;
         }
         
         .formula-bar {
@@ -201,9 +228,10 @@
     </style>
 </head>
 <body>
-    <div class="loading" id="loading">Compiling TypeScript...</div>
+    <div class="loading" id="loading">Loading...</div>
     <div class="container" style="display: none;" id="app">
         <h1>Mistral Spreadsheet</h1>
+        <p class="subtitle">A reactive spreadsheet engine: edit a cell and only its dependents recompute.</p>
         
         <div class="spreadsheet-container">
             <div class="toolbar">
@@ -246,507 +274,9 @@
     </div>
     
     <script>
-        // Inline TypeScript compilation for the browser
         const ROWS = 50;
         const COLS = 10;
-        
-        // Spreadsheet implementation (same as src/spreadsheet.ts but inlined)
-        const spreadsheetCode = `
-        type CellValue = number | string | boolean | null | { error: "#REF!" | "#DIV/0!" | "#CYCLE!" | "#VALUE!" };
 
-        interface RecomputeStats {
-          evaluatedCells: string[];
-        }
-
-        class Spreadsheet {
-          private cells: Map<string, any> = new Map();
-          private stats: RecomputeStats = { evaluatedCells: [] };
-
-          setCell(address: string, input: string | number | boolean | null): void {
-            const addr = address.toUpperCase();
-            const oldCell = this.cells.get(addr);
-
-            if (oldCell && oldCell.input === input && typeof oldCell.input === typeof input) {
-              if (typeof input === 'string' && input.startsWith('=')) {
-                const oldDeps = new Set(oldCell.dependencies);
-                const parser = new Parser();
-                const newDeps = parser.parse(input).getDependencies(this);
-                if (newDeps.size === oldDeps.size && 
-                    [...newDeps].every(d => oldDeps.has(d))) {
-                  return;
-                }
-              } else {
-                return;
-              }
-            }
-
-            const cell = oldCell || { address: addr, input: null, value: null, dependencies: new Set(), dependents: new Set() };
-            const oldDeps: Set<string> = oldCell ? new Set(oldCell.dependencies) : new Set();
-
-            cell.input = input;
-            if (typeof input === 'string' && input.startsWith('=')) {
-              const parser = new Parser();
-              cell.parsedFormula = parser.parse(input);
-              cell.dependencies = cell.parsedFormula.getDependencies(this);
-            } else {
-              cell.parsedFormula = null;
-              cell.dependencies = new Set();
-            }
-            this.cells.set(addr, cell);
-
-            for (const dep of oldDeps) {
-              if (!cell.dependencies.has(dep)) {
-                const depCell = this.cells.get(dep);
-                if (depCell) {
-                  depCell.dependents.delete(addr);
-                }
-              }
-            }
-
-            for (const dep of cell.dependencies) {
-              if (!oldDeps.has(dep)) {
-                const depCell = this.cells.get(dep);
-                if (depCell) {
-                  depCell.dependents.add(addr);
-                }
-              }
-            }
-
-            cell.dependents = new Set();
-            for (const [otherAddr, otherCell] of this.cells) {
-              if (otherAddr !== addr && otherCell.dependencies.has(addr)) {
-                cell.dependents.add(otherAddr);
-              }
-            }
-
-            const toRecompute = new Set<string>();
-            const stack = [addr];
-            while (stack.length > 0) {
-              const a = stack.pop()!;
-              if (toRecompute.has(a)) continue;
-              toRecompute.add(a);
-              const c = this.cells.get(a);
-              if (c) {
-                for (const dep of c.dependents) {
-                  stack.push(dep);
-                }
-              }
-            }
-
-            this.stats.evaluatedCells = [];
-            const evaluated = new Set<string>();
-            const evaluationStack = new Set<string>();
-            const toRecomputeSorted = Array.from(toRecompute).sort();
-
-            for (const a of toRecomputeSorted) {
-              if (!evaluated.has(a)) {
-                this.evaluateCell(a, toRecompute, new Set(evaluationStack), evaluated);
-              }
-            }
-          }
-
-          getCell(address: string): any {
-            const addr = address.toUpperCase();
-            const cell = this.cells.get(addr);
-            if (cell) {
-              return cell.value;
-            }
-            return null;
-          }
-
-          getStats(): RecomputeStats {
-            return { evaluatedCells: [...this.stats.evaluatedCells] };
-          }
-
-          resetStats(): void {
-            this.stats = { evaluatedCells: [] };
-          }
-
-          private evaluateCell(addr: string, toRecompute: Set<string>, evaluationStack: Set<string>, evaluated: Set<string>): any {
-            const cell = this.cells.get(addr)!;
-            
-            if (evaluationStack.has(addr)) {
-              cell.value = { error: "#CYCLE!" };
-              evaluated.add(addr);
-              this.stats.evaluatedCells.push(addr);
-              return cell.value;
-            }
-            
-            if (evaluated.has(addr)) {
-              return cell.value;
-            }
-
-            evaluationStack.add(addr);
-            let value: any;
-
-            if (cell.parsedFormula) {
-              const ctx = { spreadsheet: this, toRecompute, evaluationStack, evaluated };
-              value = cell.parsedFormula.evaluate(ctx);
-            } else {
-              value = this.toCellValue(cell.input);
-            }
-
-            cell.value = value;
-            evaluated.add(addr);
-            this.stats.evaluatedCells.push(addr);
-            evaluationStack.delete(addr);
-            return value;
-          }
-
-          private toCellValue(input: any): any {
-            if (input === null) return null;
-            if (typeof input === 'number') return input;
-            if (typeof input === 'boolean') return input;
-            if (typeof input === 'string') {
-              if (input === '') return null;
-              return input;
-            }
-            return null;
-          }
-
-          expandRange(start: string, end: string): string[] {
-            const startAddr = this.parseAddress(start);
-            const endAddr = this.parseAddress(end);
-            if (startAddr.col === null || startAddr.row === null || endAddr.col === null || endAddr.row === null) {
-              return [];
-            }
-            const minCol = Math.min(startAddr.col, endAddr.col);
-            const maxCol = Math.max(startAddr.col, endAddr.col);
-            const minRow = Math.min(startAddr.row, endAddr.row);
-            const maxRow = Math.max(startAddr.row, endAddr.row);
-            const addresses: string[] = [];
-            for (let col = minCol; col <= maxCol; col++) {
-              for (let row = minRow; row <= maxRow; row++) {
-                addresses.push(this.colRowToAddress(col, row));
-              }
-            }
-            return addresses;
-          }
-
-          private parseAddress(addr: string): { col: number | null; row: number | null } {
-            let i = 0;
-            while (i < addr.length && /[A-Z]/.test(addr[i])) i++;
-            if (i === 0) return { col: null, row: null };
-            const colStr = addr.substring(0, i);
-            const rowStr = addr.substring(i);
-            if (rowStr === '') return { col: null, row: null };
-            const row = parseInt(rowStr, 10);
-            if (isNaN(row) || row <= 0) return { col: null, row: null };
-            let col = 0;
-            for (let j = 0; j < colStr.length; j++) {
-              col = col * 26 + (colStr.charCodeAt(j) - 'A'.charCodeAt(0) + 1);
-            }
-            return { col, row };
-          }
-
-          private colRowToAddress(col: number, row: number): string {
-            let colStr = '';
-            let c = col;
-            while (c > 0) {
-              c--;
-              colStr = String.fromCharCode('A'.charCodeAt(0) + (c % 26)) + colStr;
-              c = Math.floor(c / 26);
-            }
-            return colStr + row;
-          }
-        }
-
-        class Parser {
-          private tokens: {type: string, value: string}[] = [];
-          private pos: number = 0;
-
-          parse(input: string) {
-            if (!input.startsWith('=')) return new ErrorExpr("#VALUE!");
-            const formula = input.substring(1).trim();
-            if (formula === '') return new ErrorExpr("#VALUE!");
-            this.tokens = this.tokenize(formula);
-            this.pos = 0;
-            try {
-              const expr = this.parseExpression();
-              if (this.pos < this.tokens.length) return new ErrorExpr("#VALUE!");
-              return expr;
-            } catch (e) {
-              return new ErrorExpr("#VALUE!");
-            }
-          }
-
-          private tokenize(input: string) {
-            const tokens: {type: string, value: string}[] = [];
-            let i = 0;
-            while (i < input.length) {
-              const c = input[i];
-              if (/\\s/.test(c)) { i++; continue; }
-              if (/[a-zA-Z]/.test(c)) {
-                let j = i;
-                while (j < input.length && /[a-zA-Z]/.test(input[j])) j++;
-                let ident = input.substring(i, j);
-                let k = j;
-                while (k < input.length && /[0-9]/.test(input[k])) k++;
-                if (k > j) {
-                  tokens.push({ type: 'REFERENCE', value: input.substring(i, k).toUpperCase() });
-                  i = k;
-                } else {
-                  const upperIdent = ident.toUpperCase();
-                  if (upperIdent === 'TRUE') tokens.push({ type: 'BOOLEAN', value: 'true' });
-                  else if (upperIdent === 'FALSE') tokens.push({ type: 'BOOLEAN', value: 'false' });
-                  else if (upperIdent === 'NULL') tokens.push({ type: 'NULL', value: 'null' });
-                  else tokens.push({ type: 'IDENT', value: ident });
-                  i = j;
-                }
-              } else if (/[0-9]/.test(c)) {
-                let j = i;
-                while (j < input.length && /[0-9]/.test(input[j])) j++;
-                let numStr = input.substring(i, j);
-                if (j < input.length && input[j] === '.') {
-                  j++;
-                  while (j < input.length && /[0-9]/.test(input[j])) j++;
-                  numStr = input.substring(i, j);
-                }
-                tokens.push({ type: 'NUMBER', value: numStr });
-                i = j;
-              } else if (c === '"') {
-                let j = i + 1;
-                while (j < input.length && input[j] !== '"') j++;
-                if (j < input.length) {
-                  tokens.push({ type: 'STRING', value: input.substring(i + 1, j) });
-                  i = j + 1;
-                } else {
-                  tokens.push({ type: 'STRING', value: input.substring(i + 1) });
-                  i = input.length;
-                }
-              } else if (c === '(') { tokens.push({ type: 'LPAREN', value: '(' }); i++; }
-              else if (c === ')') { tokens.push({ type: 'RPAREN', value: ')' }); i++; }
-              else if (c === ',') { tokens.push({ type: 'COMMA', value: ',' }); i++; }
-              else if (c === ':') { tokens.push({ type: 'COLON', value: ':' }); i++; }
-              else if (c === '+' || c === '-' || c === '*' || c === '/') { tokens.push({ type: 'OPERATOR', value: c }); i++; }
-              else if (c === '=') { tokens.push({ type: 'OPERATOR', value: '=' }); i++; }
-              else if (c === '!') {
-                if (i + 1 < input.length && input[i + 1] === '=') { tokens.push({ type: 'OPERATOR', value: '!=' }); i += 2; }
-                else { tokens.push({ type: 'OPERATOR', value: '!' }); i++; }
-              } else if (c === '<') {
-                if (i + 1 < input.length && input[i + 1] === '=') { tokens.push({ type: 'OPERATOR', value: '<=' }); i += 2; }
-                else { tokens.push({ type: 'OPERATOR', value: '<' }); i++; }
-              } else if (c === '>') {
-                if (i + 1 < input.length && input[i + 1] === '=') { tokens.push({ type: 'OPERATOR', value: '>=' }); i += 2; }
-                else { tokens.push({ type: 'OPERATOR', value: '>' }); i++; }
-              } else { i++; }
-            }
-            return tokens;
-          }
-
-          private peek() { return this.pos < this.tokens.length ? this.tokens[this.pos] : null; }
-          private consume() { return this.pos >= this.tokens.length ? {type:'RPAREN',value:''} : this.tokens[this.pos++]; }
-
-          private parseExpression() { return this.parseComparison(); }
-          private parseComparison() {
-            let left = this.parseAddition();
-            while (true) {
-              const token = this.peek();
-              if (token && token.type === 'OPERATOR' && ['=', '!=', '<', '<=', '>', '>='].includes(token.value)) {
-                const op = this.consume().value;
-                left = new BinaryExpr(op, left, this.parseAddition());
-              } else break;
-            }
-            return left;
-          }
-          private parseAddition() {
-            let left = this.parseMultiplication();
-            while (true) {
-              const token = this.peek();
-              if (token && token.type === 'OPERATOR' && (token.value === '+' || token.value === '-')) {
-                const op = this.consume().value;
-                left = new BinaryExpr(op, left, this.parseMultiplication());
-              } else break;
-            }
-            return left;
-          }
-          private parseMultiplication() {
-            let left = this.parseUnary();
-            while (true) {
-              const token = this.peek();
-              if (token && token.type === 'OPERATOR' && (token.value === '*' || token.value === '/')) {
-                const op = this.consume().value;
-                left = new BinaryExpr(op, left, this.parseUnary());
-              } else break;
-            }
-            return left;
-          }
-          private parseUnary() {
-            const token = this.peek();
-            if (token && token.type === 'OPERATOR' && (token.value === '+' || token.value === '-')) {
-              const op = this.consume().value;
-              return new UnaryExpr(op, this.parseUnary());
-            }
-            return this.parsePrimary();
-          }
-          private parsePrimary() {
-            const token = this.peek();
-            if (!token) return new ErrorExpr("#VALUE!");
-            if (token.type === 'NUMBER') { this.consume(); const n = parseFloat(token.value); return isNaN(n) ? new ErrorExpr("#VALUE!") : new NumberExpr(n); }
-            if (token.type === 'STRING') { this.consume(); return new StringExpr(token.value); }
-            if (token.type === 'BOOLEAN') { this.consume(); return new BooleanExpr(token.value === 'true'); }
-            if (token.type === 'NULL') { this.consume(); return new NullExpr(); }
-            if (token.type === 'REFERENCE') {
-              const ref = this.consume();
-              if (this.peek()?.type === 'COLON') { this.consume(); const end = this.peek();
-                if (end?.type === 'REFERENCE') { this.consume(); return new RangeExpr(ref.value, end.value); }
-                else return new ErrorExpr("#REF!");
-              } else return new ReferenceExpr(ref.value);
-            }
-            if (token.type === 'LPAREN') { this.consume(); const expr = this.parseExpression();
-              if (this.peek()?.type !== 'RPAREN') return new ErrorExpr("#VALUE!"); this.consume(); return expr; }
-            if (token.type === 'IDENT') {
-              const ident = this.consume();
-              if (this.peek()?.type !== 'LPAREN') return new ErrorExpr("#VALUE!");
-              this.consume();
-              const args = [];
-              if (this.peek()?.type !== 'RPAREN') {
-                args.push(this.parseExpression());
-                while (this.peek()?.type === 'COMMA') { this.consume(); args.push(this.parseExpression()); }
-              }
-              if (this.peek()?.type !== 'RPAREN') return new ErrorExpr("#VALUE!");
-              this.consume();
-              return new FunctionExpr(ident.value, args);
-            }
-            this.consume(); return new ErrorExpr("#VALUE!");
-          }
-        }
-
-        abstract class Expr {
-          abstract evaluate(ctx: any): any;
-          abstract getDependencies(spreadsheet: any): Set<string>;
-        }
-
-        class NumberExpr extends Expr {
-          constructor(public value: number) { super(); }
-          evaluate() { return this.value; }
-          getDependencies() { return new Set(); }
-        }
-        class StringExpr extends Expr {
-          constructor(public value: string) { super(); }
-          evaluate() { return this.value; }
-          getDependencies() { return new Set(); }
-        }
-        class BooleanExpr extends Expr {
-          constructor(public value: boolean) { super(); }
-          evaluate() { return this.value; }
-          getDependencies() { return new Set(); }
-        }
-        class NullExpr extends Expr {
-          evaluate() { return null; }
-          getDependencies() { return new Set(); }
-        }
-        class ReferenceExpr extends Expr {
-          constructor(public address: string) { super(); }
-          evaluate(ctx: any) {
-            if (ctx.evaluationStack.has(this.address)) return { error: "#CYCLE!" };
-            return ctx.spreadsheet.getCellValueForEvaluation(this.address, ctx.toRecompute, ctx.evaluationStack, ctx.evaluated);
-          }
-          getDependencies() { return new Set([this.address]); }
-        }
-        class RangeExpr extends Expr {
-          constructor(public start: string, public end: string) { super(); }
-          evaluate() { return { error: "#VALUE!" }; }
-          getDependencies(spreadsheet: any) { return new Set(spreadsheet.expandRange(this.start, this.end)); }
-        }
-        class UnaryExpr extends Expr {
-          constructor(public op: string, public expr: Expr) { super(); }
-          evaluate(ctx: any) {
-            const v = this.expr.evaluate(ctx);
-            if (isError(v)) return v;
-            const n = toNumber(v);
-            if (n === null) return { error: "#VALUE!" };
-            return this.op === '-' ? -n : n;
-          }
-          getDependencies(spreadsheet: any) { return this.expr.getDependencies(spreadsheet); }
-        }
-        class BinaryExpr extends Expr {
-          constructor(public op: string, public left: Expr, public right: Expr) { super(); }
-          evaluate(ctx: any) {
-            const lv = this.left.evaluate(ctx);
-            if (isError(lv)) return lv;
-            const rv = this.right.evaluate(ctx);
-            if (isError(rv)) return rv;
-            if (['+','-','*','/'].includes(this.op)) {
-              const ln = toNumber(lv); const rn = toNumber(rv);
-              if (ln === null || rn === null) return { error: "#VALUE!" };
-              if (this.op === '+') return ln + rn;
-              if (this.op === '-') return ln - rn;
-              if (this.op === '*') return ln * rn;
-              if (this.op === '/') return rn === 0 ? { error: "#DIV/0!" } : ln / rn;
-            } else {
-              const lc = toComparable(lv); const rc = toComparable(rv);
-              if (lc === null || rc === null) return { error: "#VALUE!" };
-              if (this.op === '=') return lc === rc;
-              if (this.op === '!=') return lc !== rc;
-              if (this.op === '<') return lc < rc;
-              if (this.op === '<=') return lc <= rc;
-              if (this.op === '>') return lc > rc;
-              if (this.op === '>=') return lc >= rc;
-            }
-            return { error: "#VALUE!" };
-          }
-          getDependencies(spreadsheet: any) {
-            const deps = this.left.getDependencies(spreadsheet);
-            for (const d of this.right.getDependencies(spreadsheet)) deps.add(d);
-            return deps;
-          }
-        }
-        class FunctionExpr extends Expr {
-          constructor(public name: string, public args: Expr[]) { super(); }
-          evaluate(ctx: any) {
-            const upper = this.name.toUpperCase();
-            if (upper === 'IF' && this.args.length === 3) {
-              const cond = this.args[0].evaluate(ctx);
-              if (isError(cond)) return cond;
-              return toBoolean(cond) ? this.args[1].evaluate(ctx) : this.args[2].evaluate(ctx);
-            }
-            const vals = [];
-            for (const arg of this.args) {
-              if (arg instanceof RangeExpr) {
-                for (const addr of ctx.spreadsheet.expandRange(arg.start, arg.end)) {
-                  vals.push(ctx.spreadsheet.getCellValueForEvaluation(addr, ctx.toRecompute, ctx.evaluationStack, ctx.evaluated));
-                }
-              } else {
-                vals.push(arg.evaluate(ctx));
-              }
-            }
-            const nums = [];
-            for (const v of vals) {
-              if (isError(v)) return v;
-              const n = toNumber(v);
-              if (n === null) return { error: "#VALUE!" };
-              nums.push(n);
-            }
-            if (nums.length === 0) return { error: "#VALUE!" };
-            if (upper === 'SUM') return nums.reduce((a,b) => a+b, 0);
-            if (upper === 'MIN') return Math.min(...nums);
-            if (upper === 'MAX') return Math.max(...nums);
-            return { error: "#VALUE!" };
-          }
-          getDependencies(spreadsheet: any) {
-            const deps = new Set<string>();
-            for (const arg of this.args) {
-              for (const d of arg.getDependencies(spreadsheet)) deps.add(d);
-            }
-            return deps;
-          }
-        }
-        class ErrorExpr extends Expr {
-          constructor(public error: string) { super(); }
-          evaluate() { return { error: this.error }; }
-          getDependencies() { return new Set(); }
-        }
-
-        function isError(v: any) { return v && typeof v === 'object' && 'error' in v; }
-        function toNumber(v: any) { if (v === null) return 0; if (typeof v === 'number') return v; return null; }
-        function toComparable(v: any) { if (v === null) return 0; if (typeof v === 'number') return v; if (typeof v === 'boolean') return v ? 1 : 0; return null; }
-        function toBoolean(v: any) { if (v === null) return false; if (typeof v === 'number') return v !== 0; if (typeof v === 'boolean') return v; if (typeof v === 'string') return v !== ''; return false; }
-        `;
-
-        // Create the Spreadsheet class in the global scope
-        eval(ts.transpile(spreadsheetCode));
-        
         // Now create the app
         const sheet = new Spreadsheet();
         const bodyEl = document.getElementById('spreadsheetBody');
@@ -759,9 +289,12 @@
         const appEl = document.getElementById('app');
 
         let currentCell = { row: 0, col: 0 };
-        const cells: Map<string, HTMLInputElement> = new Map();
+        const cells = new Map();
+        const raw = new Map();
+        const boldCells = new Set();
+        const fillCells = new Set();
 
-        function colRowToAddress(col: number, row: number): string {
+        function colRowToAddress(col, row) {
             let colStr = '';
             let c = col + 1;
             while (c > 0) {
@@ -794,19 +327,20 @@
                         currentCell = { row, col };
                         currentAddressEl.textContent = address;
                         const val = sheet.getCell(address);
-                        formulaInput.value = val === null ? '' : val.toString();
+                        formulaInput.value = raw.has(address) ? raw.get(address) : formatValue(val);
                         clearHighlights();
                         input.classList.add('highlight');
                     });
                     input.addEventListener('blur', () => {
                         const value = input.value;
+                        if (value !== '') raw.set(address, value); else raw.delete(address);
                         if (value.startsWith('=')) sheet.setCell(address, value);
                         else if (value === '') sheet.setCell(address, null);
                         else if (!isNaN(Number(value))) sheet.setCell(address, Number(value));
                         else if (value.toLowerCase() === 'true') sheet.setCell(address, true);
                         else if (value.toLowerCase() === 'false') sheet.setCell(address, false);
                         else sheet.setCell(address, value);
-                        updateCellDisplay(input, address);
+                        refreshAll();
                         updateStats();
                     });
                     input.addEventListener('keydown', (e) => {
@@ -836,16 +370,23 @@
             cells.get('A1')?.focus();
         }
 
-        function updateCellDisplay(input: HTMLInputElement, address: string) {
+        function updateCellDisplay(input, address) {
             const value = sheet.getCell(address);
             const displayValue = formatValue(value);
             input.value = displayValue;
             input.className = 'cell';
+            if (raw.has(address) && raw.get(address).startsWith('=')) input.classList.add('formula');
+            if (boldCells.has(address)) input.classList.add('bold');
+            if (fillCells.has(address)) input.classList.add('fill');
             if (typeof value === 'number') input.classList.add('number');
             else if (value && typeof value === 'object' && 'error' in value) input.classList.add('error');
         }
 
-        function formatValue(value: any): string {
+        function refreshAll() {
+            for (const [addr, el] of cells) updateCellDisplay(el, addr);
+        }
+
+        function formatValue(value) {
             if (value === null) return '';
             if (value === undefined) return '';
             if (typeof value === 'number') return value.toString();
@@ -860,7 +401,7 @@
 
         function updateStats() {
             const stats = sheet.getStats();
-            statsDisplay.textContent = stats.evaluatedCells.join(', ') || 'None';
+            statsDisplay.innerHTML = stats.evaluatedCells.map(a => '<code>' + a + '</code>').join('') || 'None';
         }
 
         clearBtn.addEventListener('click', () => {
@@ -868,7 +409,7 @@
             if (address) {
                 sheet.setCell(address, null);
                 const cell = cells.get(address);
-                if (cell) { cell.value = ''; updateCellDisplay(cell, address); updateStats(); }
+                if (cell) { cell.value = ''; refreshAll(); updateStats(); }
             }
         });
 
@@ -877,10 +418,50 @@
             updateStats();
         });
 
+        function loadDemo() {
+            const data = {
+                A1: 'Item', B1: 'Jan', C1: 'Feb', D1: 'Mar', E1: 'Total', F1: 'Peak',
+                A2: 'Rent', B2: 1200, C2: 1200, D2: 1200,
+                A3: 'Groceries', B3: 420, C3: 385, D3: 450,
+                A4: 'Transport', B4: 95, C4: 110, D4: 88,
+                A5: 'Utilities', B5: 140, C5: 155, D5: 130,
+                A6: 'Fun', B6: 220, C6: 180, D6: 310,
+                A7: 'Total', B7: '=SUM(B2:B6)', C7: '=SUM(C2:C6)', D7: '=SUM(D2:D6)', E7: '=SUM(E2:E6)', F7: '=MAX(B7:D7)',
+                A9: 'Budget', B9: 6500,
+                A10: 'Status', B10: '=IF(E7>B9,"over budget","on track")',
+                A11: 'Left', B11: '=B9-E7',
+                H1: 'Edge cases', H2: 'divide by 0', I2: '=B2/0', H3: 'cycle', I3: '=J3', J3: '=I3',
+                H4: 'text + 1', I4: '=A2+1',
+            };
+            for (let r = 2; r <= 6; r++) {
+                data['E' + r] = '=SUM(B' + r + ':D' + r + ')';
+                data['F' + r] = '=MAX(B' + r + ':D' + r + ')';
+            }
+            for (const a of ['A1','B1','C1','D1','E1','F1','H1','A7','B7','C7','D7','E7','F7']) boldCells.add(a);
+            for (const a of ['A1','B1','C1','D1','E1','F1','A7','B7','C7','D7','E7','F7']) fillCells.add(a);
+            for (const [addr, v] of Object.entries(data)) {
+                sheet.setCell(addr, v);
+                raw.set(addr, String(v));
+            }
+            // one live edit so the stats panel shows a recompute cascade
+            sheet.resetStats();
+            sheet.setCell('B3', 450);
+            raw.set('B3', '450');
+            refreshAll();
+            const target = cells.get('E7');
+            target.focus();
+            currentCell = { row: 6, col: 4 };
+            currentAddressEl.textContent = 'E7';
+            formulaInput.value = raw.get('E7');
+            clearHighlights();
+            target.classList.add('highlight');
+        }
+
         // Hide loading, show app
         loadingEl.style.display = 'none';
         appEl.style.display = 'block';
         createGrid();
+        if (new URLSearchParams(location.search).has('demo')) loadDemo();
         updateStats();
     </script>
 </body>
